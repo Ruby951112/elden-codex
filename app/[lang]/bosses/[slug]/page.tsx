@@ -50,7 +50,7 @@ export default function BossPage({ params }: PageProps) {
   const content = readBossContent(slug, lang);
   const name = lang === 'en' ? boss.name_en : boss.name_zh;
   const location = lang === 'en' ? boss.location_en : boss.location_zh;
-  const weakness = lang === 'en' ? boss.weakness_en : boss.weakness_zh;
+  const weakness = boss.weakness;
 
   return (
     <article className="reading-area min-h-screen">

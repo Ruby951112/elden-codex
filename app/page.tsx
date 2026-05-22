@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
-import { defaultLocale } from '@/lib/i18n';
+import { headers } from 'next/headers';
+import { matchLocale } from '@/lib/i18n';
 
 export default function Root() {
-  redirect(`/${defaultLocale}`);
+  const acceptLanguage = headers().get('accept-language');
+  redirect(`/${matchLocale(acceptLanguage)}`);
 }

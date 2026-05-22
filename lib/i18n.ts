@@ -140,3 +140,31 @@ export function getDictionary(locale: Locale) {
 export function isValidLocale(locale: string): locale is Locale {
   return locales.includes(locale as Locale);
 }
+
+/**
+ * Pick the best-matching locale from an `Accept-Language` header.
+ * Matches by primary subtag (e.g. `zh-CN` → `zh`) honouring q-values,
+ * and falls back to `defaultLocale` when nothing matches.
+ */
+export function matchLocale(acceptLanguage: string | null | undefined): Locale {
+  if (!acceptLanguage) return defaultLocale;
+
+  const ranked = acceptLanguage
+    .split(',')
+    .map((part) => {
+      const [tag, ...params] = part.trim().split(';');
+      const q = params.find((p) => p.trim().startsWith('q='));
+      const quality = q ? parseFloat(q.trim().slice(2)) : 1;
+      return { tag: tag.trim().toLowerCase(), quality: Number.isNaN(quality) ? 0 : quality };
+    })
+    .filter((entry) => entry.tag)
+    .sort((a, b) => b.quality - a.quality);
+
+  for (const { tag } of ranked) {
+    const primary = tag.split('-')[0];
+    const match = locales.find((locale) => locale === primary);
+    if (match) return match;
+  }
+
+  return defaultLocale;
+}
