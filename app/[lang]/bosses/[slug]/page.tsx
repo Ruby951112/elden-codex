@@ -50,7 +50,7 @@ export default function BossPage({ params }: PageProps) {
   const content = readBossContent(slug, lang);
   const name = lang === 'en' ? boss.name_en : boss.name_zh;
   const location = lang === 'en' ? boss.location_en : boss.location_zh;
-  const weakness = boss.weakness;
+  const weakness = boss.weakness.join(' · ');
 
   return (
     <article className="reading-area min-h-screen">
@@ -78,7 +78,7 @@ export default function BossPage({ params }: PageProps) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-8">
           <StatBlock label={dict.boss.location} value={location} small />
           <StatBlock label={dict.boss.runes} value={boss.runes.toLocaleString()} />
-          <StatBlock label={dict.boss.hp} value={boss.hp_ng.toLocaleString()} />
+          <StatBlock label={dict.boss.hp} value={boss.hp.toLocaleString()} />
           <StatBlock
             label={dict.boss.difficulty}
             value={'★'.repeat(Math.min(5, Math.ceil(boss.difficulty / 2)))}

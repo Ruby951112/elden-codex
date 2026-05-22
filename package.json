@@ -11,7 +11,7 @@
     "generate:walkthrough": "tsx scripts/generate-walkthrough.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.98.0",
     "@vercel/analytics": "^1.4.1",
     "clsx": "^2.1.1",
     "gray-matter": "^4.0.3",

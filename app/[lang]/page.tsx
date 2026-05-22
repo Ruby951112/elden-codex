@@ -7,7 +7,7 @@ import { BossCard } from '@/components/boss-card';
 
 export default function HomePage({ params: { lang } }: { params: { lang: Locale } }) {
   const dict = getDictionary(lang);
-  const featured = bossesData.bosses.filter((b) => b.featured).slice(0, 4);
+  const featured = bossesData.bosses.filter((b) => b.remembrance).slice(0, 4);
   const totalBosses = 165;
   const totalRegions = bossesData.regions.length;
 

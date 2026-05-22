@@ -48,7 +48,9 @@ export default function WalkthroughPage({ params: { lang } }: { params: { lang: 
                     </span>
                   </div>
                   <p className="text-sm text-ink-muted font-serif italic">
-                    {lang === 'en' ? region.description_en : region.description_zh}
+                    {lang === 'en'
+                      ? `Recommended level ${region.level_range}`
+                      : `推荐等级 ${region.level_range}`}
                   </p>
                 </div>
               </div>

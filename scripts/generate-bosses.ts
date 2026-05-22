@@ -42,14 +42,14 @@ const BOSSES_JSON = path.join(ROOT, 'data', 'bosses.json');
 const REFERENCE_DIR = path.join(ROOT, 'content', 'bosses');
 const OUTPUT_DIR = path.join(ROOT, 'content', 'bosses');
 
-// Claude Sonnet 4.5 — best price/quality for this use case
-const MODEL = 'claude-sonnet-4-5';
+// Claude Sonnet 4.6 — best price/quality for this use case
+const MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 4000;
 
 // Reference bosses (the 3 hand-crafted ones) — used as in-context style anchors
 const REFERENCE_SLUGS = ['margit-the-fell-omen', 'godrick-the-grafted', 'malenia-blade-of-miquella'];
 
-// Approx token cost (Sonnet 4.5: $3 / 1M input, $15 / 1M output)
+// Approx token cost (Sonnet 4.6: $3 / 1M input, $15 / 1M output — unchanged from 4.5)
 const COST_PER_INPUT_TOKEN = 3 / 1_000_000;
 const COST_PER_OUTPUT_TOKEN = 15 / 1_000_000;
 
@@ -91,12 +91,12 @@ interface Boss {
   location_zh: string;
   region: string;
   type: string;
+  remembrance: boolean;
   runes: number;
-  hp_ng: number;
+  hp: number;
   difficulty: number;
   phases: number;
-  weakness_en: string;
-  weakness_zh: string;
+  weakness: string[];
   summary_en: string;
   summary_zh: string;
 }
@@ -143,7 +143,7 @@ ${referenceContent}
 function buildUserPrompt(boss: Boss, lang: 'en' | 'zh'): string {
   const name = lang === 'en' ? boss.name_en : boss.name_zh;
   const location = lang === 'en' ? boss.location_en : boss.location_zh;
-  const weakness = lang === 'en' ? boss.weakness_en : boss.weakness_zh;
+  const weakness = boss.weakness.join(', ');
   const summary = lang === 'en' ? boss.summary_en : boss.summary_zh;
 
   return `Generate the MDX guide for this boss:
@@ -154,7 +154,7 @@ function buildUserPrompt(boss: Boss, lang: 'en' | 'zh'): string {
 - Type: ${boss.type}
 - Region: ${boss.region}
 - Phases: ${boss.phases}
-- HP (NG): ${boss.hp_ng}
+- HP (NG): ${boss.hp}
 - Runes: ${boss.runes}
 - Difficulty: ${boss.difficulty}/10
 - Weakness: ${weakness}
@@ -205,13 +205,23 @@ async function generateOne(
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: systemPrompt,
+    // Match the prior Sonnet 4.5 behavior (no thinking). Sonnet 4.6 defaults to
+    // `high` effort, which would silently raise per-boss cost across this batch.
+    thinking: { type: 'disabled' },
+    output_config: { effort: 'low' },
+    // The system prompt (instructions + the 3 reference guides) is identical for
+    // every boss in a language, so cache it: each boss after the first reads it
+    // back at ~0.1x instead of paying full input price.
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userPrompt }],
   });
 
+  const usage = response.usage;
   const cost =
-    response.usage.input_tokens * COST_PER_INPUT_TOKEN +
-    response.usage.output_tokens * COST_PER_OUTPUT_TOKEN;
+    usage.input_tokens * COST_PER_INPUT_TOKEN +
+    (usage.cache_creation_input_tokens ?? 0) * COST_PER_INPUT_TOKEN * 1.25 +
+    (usage.cache_read_input_tokens ?? 0) * COST_PER_INPUT_TOKEN * 0.1 +
+    usage.output_tokens * COST_PER_OUTPUT_TOKEN;
   costTracker.spent += cost;
 
   const text = response.content

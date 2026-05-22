@@ -29,7 +29,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
         url: `${base}/${lang}/bosses/${boss.slug}`,
         lastModified: now,
         changeFrequency: 'monthly',
-        priority: boss.featured ? 0.9 : 0.7,
+        priority: boss.remembrance ? 0.9 : 0.7,
       });
     }
   }

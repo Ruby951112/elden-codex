@@ -25,7 +25,7 @@ const ROOT = process.cwd();
 const BOSSES_JSON = path.join(ROOT, 'data', 'bosses.json');
 const OUTPUT_DIR = path.join(ROOT, 'content', 'walkthrough');
 
-const MODEL = 'claude-sonnet-4-5';
+const MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 4000;
 const COST_PER_INPUT_TOKEN = 3 / 1_000_000;
 const COST_PER_OUTPUT_TOKEN = 15 / 1_000_000;
@@ -106,7 +106,6 @@ Length: 600-1000 words. Be specific, not generic. Reference actual items, NPCs, 
 
       const userPrompt = `Region: ${lang === 'en' ? region.name_en : region.name_zh}
 Level range: ${region.level_range}
-Description: ${lang === 'en' ? region.description_en : region.description_zh}
 
 Bosses in this region:
 ${bossListText}
@@ -122,12 +121,22 @@ Frontmatter fields:
         const response = await client.messages.create({
           model: MODEL,
           max_tokens: MAX_TOKENS,
-          system: systemPrompt,
+          // Match prior Sonnet 4.5 behavior (no thinking) — 4.6 defaults to `high` effort.
+          thinking: { type: 'disabled' },
+          output_config: { effort: 'low' },
+          // System prompt is identical across regions in a language. NOTE: it's
+          // short (~200 tokens) — below Sonnet 4.6's 2048-token cache minimum —
+          // so this won't actually cache until the prompt grows. Marked anyway
+          // so caching kicks in automatically if it does.
+          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userPrompt }],
         });
+        const usage = response.usage;
         const cost =
-          response.usage.input_tokens * COST_PER_INPUT_TOKEN +
-          response.usage.output_tokens * COST_PER_OUTPUT_TOKEN;
+          usage.input_tokens * COST_PER_INPUT_TOKEN +
+          (usage.cache_creation_input_tokens ?? 0) * COST_PER_INPUT_TOKEN * 1.25 +
+          (usage.cache_read_input_tokens ?? 0) * COST_PER_INPUT_TOKEN * 0.1 +
+          usage.output_tokens * COST_PER_OUTPUT_TOKEN;
         totalCost += cost;
 
         const text = response.content

@@ -26,7 +26,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const name = params.lang === 'en' ? region.name_en : region.name_zh;
   return {
     title: `${name} Walkthrough`,
-    description: params.lang === 'en' ? region.description_en : region.description_zh,
+    description:
+      params.lang === 'en'
+        ? `${region.name_en} walkthrough — recommended level ${region.level_range}.`
+        : `${region.name_zh} 流程攻略 — 推荐等级 ${region.level_range}。`,
   };
 }
 
@@ -39,7 +42,10 @@ export default function RegionPage({ params }: PageProps) {
 
   const regionBosses = bossesData.bosses.filter((b) => b.region === regionSlug);
   const name = lang === 'en' ? region.name_en : region.name_zh;
-  const description = lang === 'en' ? region.description_en : region.description_zh;
+  const description =
+    lang === 'en'
+      ? `Recommended level ${region.level_range}`
+      : `推荐等级 ${region.level_range}`;
 
   return (
     <div className="reading-area min-h-screen">
