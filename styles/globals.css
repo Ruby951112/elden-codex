@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background: #14110d;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #1a1612;
+  color: #c9b896;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 17px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings always Cinzel */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cinzel', 'Trajan Pro', serif;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: #d4c4a8;
+}
+
+/* Mobile-friendly tap targets */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Selection styling matches theme */
+::selection {
+  background: #6b5a38;
+  color: #f4d98a;
+}
+
+/* Scrollbar (desktop) */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #14110d;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #3a3228;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b5a38;
+  }
+}
+
+/* Ornament dividers */
+.ornament {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #6b5a38;
+  font-size: 13px;
+  letter-spacing: 0.4em;
+}
+
+.ornament::before,
+.ornament::after {
+  content: '';
+  flex: 1;
+  max-width: 80px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #3a3228, transparent);
+}
+
+/* MDX prose styling */
+.prose-codex {
+  color: #c9b896;
+}
+.prose-codex h2 {
+  font-size: 1.5rem;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  color: #c9a559;
+  letter-spacing: 0.18em;
+}
+.prose-codex h3 {
+  font-size: 1.15rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  color: #d4c4a8;
+  letter-spacing: 0.14em;
+}
+.prose-codex p {
+  margin-bottom: 1.25rem;
+}
+.prose-codex strong {
+  color: #d4b572;
+  font-weight: 500;
+}
+.prose-codex em {
+  color: #a89878;
+  font-style: italic;
+}
+.prose-codex ul {
+  margin: 1rem 0 1.5rem;
+  padding-left: 1.25rem;
+  list-style: none;
+}
+.prose-codex ul li {
+  position: relative;
+  margin-bottom: 0.5rem;
+  padding-left: 1rem;
+}
+.prose-codex ul li::before {
+  content: '◆';
+  position: absolute;
+  left: -0.25rem;
+  color: #6b5a38;
+  font-size: 0.65rem;
+  top: 0.4rem;
+}
+.prose-codex blockquote {
+  border-left: 2px solid #6b5a38;
+  background: #1f1a14;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  font-style: italic;
+  color: #a89878;
+}
+.prose-codex blockquote.critical {
+  border-left-color: #c44a3a;
+  background: #1a1410;
+  color: #d4b572;
+  font-style: normal;
+}
+.prose-codex code {
+  background: #14110d;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #d4b572;
+}
+
+/* Reading-mode background variant */
+.reading-area {
+  background: #2a241c;
+}
