@@ -10,7 +10,13 @@
 
 html {
   background: #14110d;
-  scroll-behavior: smooth;
+}
+
+/* Smooth scroll only for users who haven't asked to reduce motion */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -29,6 +35,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 400;
   letter-spacing: 0.12em;
   color: #d4c4a8;
+  text-wrap: balance; /* avoid a lone trailing word on its own line */
 }
 
 /* Mobile-friendly tap targets */
@@ -90,6 +97,7 @@ button, a {
   margin-bottom: 1rem;
   color: #c9a559;
   letter-spacing: 0.18em;
+  scroll-margin-top: 5rem; /* clear the sticky header on anchor jumps */
 }
 .prose-codex h3 {
   font-size: 1.15rem;
@@ -97,9 +105,11 @@ button, a {
   margin-bottom: 0.75rem;
   color: #d4c4a8;
   letter-spacing: 0.14em;
+  scroll-margin-top: 5rem;
 }
 .prose-codex p {
   margin-bottom: 1.25rem;
+  text-wrap: pretty; /* avoid orphans/short last lines in body copy */
 }
 .prose-codex strong {
   color: #d4b572;
@@ -153,4 +163,9 @@ button, a {
 /* Reading-mode background variant */
 .reading-area {
   background: #2a241c;
+}
+
+/* Respect the iOS home-bar / notch inset on the fixed bottom nav */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }

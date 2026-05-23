@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { siteConfig } from '@/lib/site-config';
 import { locales } from '@/lib/i18n';
 import bossesData from '@/data/bosses.json';
+import buildsData from '@/data/builds.json';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = siteConfig.baseUrl;
@@ -9,7 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const entries: MetadataRoute.Sitemap = [];
 
   // Static pages per locale
-  const staticPaths = ['', '/bosses', '/walkthrough', '/contact'];
+  const staticPaths = ['', '/bosses', '/walkthrough', '/builds', '/weapons', '/map', '/contact', '/about', '/privacy', '/terms'];
 
   for (const lang of locales) {
     for (const p of staticPaths) {
@@ -42,6 +43,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
         lastModified: now,
         changeFrequency: 'monthly',
         priority: 0.7,
+      });
+    }
+  }
+
+  // Build detail pages
+  for (const lang of locales) {
+    for (const build of buildsData.builds) {
+      entries.push({
+        url: `${base}/${lang}/builds/${build.slug}`,
+        lastModified: now,
+        changeFrequency: 'monthly',
+        priority: build.tier === 'S' ? 0.9 : 0.7,
       });
     }
   }

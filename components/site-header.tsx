@@ -1,21 +1,25 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { getDictionary, type Locale } from '@/lib/i18n';
 import { siteConfig } from '@/lib/site-config';
 import { cn } from '@/lib/utils';
+import { SiteSearch } from '@/components/site-search';
 
 export function SiteHeader({ locale }: { locale: Locale }) {
   const dict = getDictionary(locale);
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   const navItems = [
     { key: 'bosses', href: `/${locale}/bosses`, label: dict.nav.bosses },
     { key: 'walkthrough', href: `/${locale}/walkthrough`, label: dict.nav.walkthrough },
     { key: 'builds', href: `/${locale}/builds`, label: dict.nav.builds },
     { key: 'weapons', href: `/${locale}/weapons`, label: dict.nav.weapons },
-    { key: 'map', href: `/${locale}/map`, label: dict.nav.map },
+    // { key: 'map', href: `/${locale}/map`, label: dict.nav.map },
   ];
 
   const otherLocale: Locale = locale === 'en' ? 'zh' : 'en';
@@ -37,15 +41,22 @@ export function SiteHeader({ locale }: { locale: Locale }) {
             <Link
               key={item.key}
               href={item.href}
-              className="font-gothic text-xs uppercase tracking-widest text-ink-subtle hover:text-gold px-3 py-2 transition-colors"
+              aria-current={isActive(item.href) ? 'page' : undefined}
+              className={cn(
+                'font-gothic text-xs uppercase tracking-widest px-3 py-2 border-b-2 transition-colors',
+                isActive(item.href)
+                  ? 'text-gold border-gold-dim'
+                  : 'text-ink-subtle border-transparent hover:text-gold'
+              )}
             >
               {item.label}
             </Link>
           ))}
         </nav>
 
-        {/* Right side: lang + hamburger */}
+        {/* Right side: search + lang + hamburger */}
         <div className="flex items-center gap-3">
+          <SiteSearch locale={locale} />
           <LangToggle currentLocale={locale} otherLocale={otherLocale} />
 
           {/* Mobile hamburger */}
@@ -79,7 +90,13 @@ export function SiteHeader({ locale }: { locale: Locale }) {
                 key={item.key}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="font-gothic text-xs uppercase tracking-widest text-ink-subtle hover:text-gold hover:bg-bg-raised px-6 py-3 border-b border-edge-subtle"
+                aria-current={isActive(item.href) ? 'page' : undefined}
+                className={cn(
+                  'font-gothic text-xs uppercase tracking-widest px-6 py-3 border-b border-edge-subtle transition-colors',
+                  isActive(item.href)
+                    ? 'text-gold bg-bg-raised'
+                    : 'text-ink-subtle hover:text-gold hover:bg-bg-raised'
+                )}
               >
                 {item.label}
               </Link>

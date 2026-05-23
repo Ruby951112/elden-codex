@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:check": "NEXT_DIST_DIR=.next-check next build",
     "start": "next start",
     "lint": "next lint",
     "generate:bosses": "tsx scripts/generate-bosses.ts",

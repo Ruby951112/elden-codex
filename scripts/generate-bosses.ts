@@ -1,30 +1,21 @@
 #!/usr/bin/env tsx
 /**
- * Boss Guide Generation Pipeline
+ * Boss Guide Generation Pipeline (v2 — interleaved bilingual)
  *
- * Generates phase-by-phase Elden Ring boss strategy MDX files in both English
- * and Chinese, using the Anthropic Claude API.
+ * For each boss, generates BOTH the English and Chinese MDX before moving on.
+ * If interrupted, just re-run — already-generated files are skipped.
  *
  * Usage:
- *   npm run generate:bosses                      # generate all bosses, both langs
- *   npm run generate:bosses -- --slug=malenia    # one boss
- *   npm run generate:bosses -- --region=limgrave # all bosses in a region
- *   npm run generate:bosses -- --lang=zh         # only Chinese
- *   npm run generate:bosses -- --force           # overwrite existing
- *   npm run generate:bosses -- --max-cost=5      # stop after spending $5
- *   npm run generate:bosses -- --dry-run         # estimate cost without calling API
+ *   npm run generate:bosses                       # all bosses, both langs
+ *   npm run generate:bosses -- --limit=5          # only first 5 unprocessed bosses
+ *   npm run generate:bosses -- --slug=malenia     # one boss
+ *   npm run generate:bosses -- --region=limgrave  # all bosses in one region
+ *   npm run generate:bosses -- --lang=zh          # only Chinese
+ *   npm run generate:bosses -- --force            # overwrite existing
+ *   npm run generate:bosses -- --max-cost=5       # stop after spending $5
+ *   npm run generate:bosses -- --dry-run          # estimate without API calls
  *
- * Cost estimate:
- *   ~$0.05-0.15 per boss per language (Claude Sonnet 4.5)
- *   Full run (165 bosses × 2 langs) ≈ $20-50
- *
- * Output:
- *   content/bosses/en/<slug>.mdx
- *   content/bosses/zh/<slug>.mdx
- *
- * Each MDX uses the same structure so the page template can rely on it.
- * The pipeline reads the 3 hand-written reference files as quality anchors
- * and includes them in the system prompt as the "tone and depth" standard.
+ * Cost estimate: ~$0.05-0.08 per language. Full run ≈ $6-8.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -42,16 +33,32 @@ const BOSSES_JSON = path.join(ROOT, 'data', 'bosses.json');
 const REFERENCE_DIR = path.join(ROOT, 'content', 'bosses');
 const OUTPUT_DIR = path.join(ROOT, 'content', 'bosses');
 
-// Claude Sonnet 4.6 — best price/quality for this use case
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-sonnet-4-5';
 const MAX_TOKENS = 4000;
 
-// Reference bosses (the 3 hand-crafted ones) — used as in-context style anchors
-const REFERENCE_SLUGS = ['margit-the-fell-omen', 'godrick-the-grafted', 'malenia-blade-of-miquella'];
+const REFERENCE_SLUGS = [
+  'margit-the-fell-omen',
+  'godrick-the-grafted',
+  'malenia-blade-of-miquella',
+];
 
-// Approx token cost (Sonnet 4.6: $3 / 1M input, $15 / 1M output — unchanged from 4.5)
 const COST_PER_INPUT_TOKEN = 3 / 1_000_000;
 const COST_PER_OUTPUT_TOKEN = 15 / 1_000_000;
+
+const MAX_RETRIES = 3;
+
+// ---------- Graceful shutdown ----------
+
+let interrupted = false;
+process.on('SIGINT', () => {
+  if (interrupted) {
+    console.log('\n\nForce exiting…');
+    process.exit(130);
+  }
+  interrupted = true;
+  console.log('\n\n⚠  Interrupt received. Finishing current task then stopping…');
+  console.log('   (Press Ctrl+C again to force quit.)');
+});
 
 // ---------- Arg parsing ----------
 
@@ -62,10 +69,11 @@ interface Args {
   force: boolean;
   maxCost: number;
   dryRun: boolean;
+  limit: number;
 }
 
 function parseArgs(): Args {
-  const args: Args = { force: false, maxCost: Infinity, dryRun: false };
+  const args: Args = { force: false, maxCost: Infinity, dryRun: false, limit: Infinity };
   for (const arg of process.argv.slice(2)) {
     if (arg === '--force') args.force = true;
     else if (arg === '--dry-run') args.dryRun = true;
@@ -76,12 +84,14 @@ function parseArgs(): Args {
       if (v === 'en' || v === 'zh') args.lang = v;
     } else if (arg.startsWith('--max-cost=')) {
       args.maxCost = parseFloat(arg.slice(11));
+    } else if (arg.startsWith('--limit=')) {
+      args.limit = parseInt(arg.slice(8), 10);
     }
   }
   return args;
 }
 
-// ---------- Prompt builders ----------
+// ---------- Types ----------
 
 interface Boss {
   slug: string;
@@ -91,15 +101,16 @@ interface Boss {
   location_zh: string;
   region: string;
   type: string;
-  remembrance: boolean;
   runes: number;
-  hp: number;
+  hp?: number | string;
   difficulty: number;
   phases: number;
   weakness: string[];
   summary_en: string;
   summary_zh: string;
 }
+
+// ---------- Reference loading ----------
 
 function loadReferences(lang: 'en' | 'zh'): string {
   const examples: string[] = [];
@@ -113,10 +124,12 @@ function loadReferences(lang: 'en' | 'zh'): string {
   return examples.join('\n\n');
 }
 
+// ---------- Prompt builders ----------
+
 function buildSystemPrompt(lang: 'en' | 'zh', referenceContent: string): string {
   const langLabel = lang === 'en' ? 'English' : 'Simplified Chinese (简体中文)';
 
-  return `You are an expert Elden Ring strategist and guide writer. Your job is to produce a single MDX (Markdown + frontmatter) file containing a phase-by-phase boss strategy guide in ${langLabel}.
+  return `You are an expert Elden Ring strategist and guide writer. Your job is to produce a single MDX (Markdown + frontmatter) file containing a phase-by-phase Elden Ring boss strategy guide in ${langLabel}.
 
 ## Quality Standard
 
@@ -131,20 +144,20 @@ ${referenceContent}
 3. ${lang === 'en'
       ? 'Write in fluent, evocative English. Tone: knowledgeable veteran who respects the reader.'
       : '使用流畅、有韵味的简体中文。语气:尊重读者的资深玩家。直接使用游戏官方简体中文译名(例如:玛尔基特、葛瑞克、米凯拉之刃、绯红腐败、卢恩、赐福、褪色者)。不要使用繁体字。'}
-4. Use section headings exactly matching the references (Phase Strategy, Attacks & Counters, Recommended Loadout, etc.). ${lang === 'zh' ? 'Translate the headings appropriately into Chinese (阶段策略、招式与应对、推荐配装).' : ''}
+4. Use section headings exactly matching the references (Phase Strategy, Attacks & Counters, Recommended Loadout, etc.). ${lang === 'zh' ? '将标题适当翻译为中文(阶段策略、招式与应对、推荐配装).' : ''}
 5. Include 3-6 concrete attack patterns with specific counters.
 6. Be specific: name actual weapons, talismans, ashes of war, items.
 7. NEVER fabricate game mechanics. If you are unsure about a detail, omit it rather than guess.
 8. Use blockquotes for critical warnings: > **Critical:** ...
 9. Length: 800-1500 words of actual content (not including frontmatter).
-10. The MDX will be embedded in a styled page that already shows the boss's stats, name, and location — do NOT repeat those at the top of the body. Start directly with strategy.`;
+10. The MDX will be embedded in a styled page that already shows the boss's stats — do NOT repeat those at the top. Start directly with strategy.`;
 }
 
 function buildUserPrompt(boss: Boss, lang: 'en' | 'zh'): string {
   const name = lang === 'en' ? boss.name_en : boss.name_zh;
   const location = lang === 'en' ? boss.location_en : boss.location_zh;
-  const weakness = boss.weakness.join(', ');
   const summary = lang === 'en' ? boss.summary_en : boss.summary_zh;
+  const weaknessStr = boss.weakness.join(', ');
 
   return `Generate the MDX guide for this boss:
 
@@ -154,10 +167,10 @@ function buildUserPrompt(boss: Boss, lang: 'en' | 'zh'): string {
 - Type: ${boss.type}
 - Region: ${boss.region}
 - Phases: ${boss.phases}
-- HP (NG): ${boss.hp}
+- HP (NG): ${boss.hp ?? 'unknown'}
 - Runes: ${boss.runes}
-- Difficulty: ${boss.difficulty}/10
-- Weakness: ${weakness}
+- Difficulty: ${boss.difficulty}/5
+- Weakness: ${weaknessStr}
 - Quick summary: ${summary}
 
 Required frontmatter fields:
@@ -170,7 +183,37 @@ Required frontmatter fields:
 Begin output now.`;
 }
 
-// ---------- Generation ----------
+// ---------- Generation with retry ----------
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callAnthropicWithRetry(
+  client: Anthropic,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<Anthropic.Message> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await client.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      });
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_RETRIES) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.log(`     retry ${attempt}/${MAX_RETRIES} in ${wait}ms…`);
+        await sleep(wait);
+      }
+    }
+  }
+  throw lastError;
+}
 
 async function generateOne(
   client: Anthropic,
@@ -183,45 +226,29 @@ async function generateOne(
   const outPath = path.join(OUTPUT_DIR, lang, `${boss.slug}.mdx`);
 
   if (REFERENCE_SLUGS.includes(boss.slug) && !args.force) {
-    return { skipped: true, cost: 0, reason: 'reference boss (use --force to overwrite)' };
+    return { skipped: true, cost: 0, reason: 'reference' };
   }
   if (fs.existsSync(outPath) && !args.force) {
-    return { skipped: true, cost: 0, reason: 'already exists (use --force)' };
+    return { skipped: true, cost: 0, reason: 'exists' };
   }
 
   if (args.dryRun) {
-    // Rough estimate: ~3k input + ~2k output tokens
     const est = 3000 * COST_PER_INPUT_TOKEN + 2000 * COST_PER_OUTPUT_TOKEN;
     return { skipped: true, cost: est, reason: 'dry-run' };
   }
 
   if (costTracker.spent >= args.maxCost) {
-    return { skipped: true, cost: 0, reason: 'cost cap reached' };
+    return { skipped: true, cost: 0, reason: 'cost cap' };
   }
 
   const systemPrompt = buildSystemPrompt(lang, referenceContent);
   const userPrompt = buildUserPrompt(boss, lang);
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    // Match the prior Sonnet 4.5 behavior (no thinking). Sonnet 4.6 defaults to
-    // `high` effort, which would silently raise per-boss cost across this batch.
-    thinking: { type: 'disabled' },
-    output_config: { effort: 'low' },
-    // The system prompt (instructions + the 3 reference guides) is identical for
-    // every boss in a language, so cache it: each boss after the first reads it
-    // back at ~0.1x instead of paying full input price.
-    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: userPrompt }],
-  });
+  const response = await callAnthropicWithRetry(client, systemPrompt, userPrompt);
 
-  const usage = response.usage;
   const cost =
-    usage.input_tokens * COST_PER_INPUT_TOKEN +
-    (usage.cache_creation_input_tokens ?? 0) * COST_PER_INPUT_TOKEN * 1.25 +
-    (usage.cache_read_input_tokens ?? 0) * COST_PER_INPUT_TOKEN * 0.1 +
-    usage.output_tokens * COST_PER_OUTPUT_TOKEN;
+    response.usage.input_tokens * COST_PER_INPUT_TOKEN +
+    response.usage.output_tokens * COST_PER_OUTPUT_TOKEN;
   costTracker.spent += cost;
 
   const text = response.content
@@ -229,7 +256,6 @@ async function generateOne(
     .map((b) => b.text)
     .join('');
 
-  // Clean: strip ``` fences if Claude added any
   const cleaned = text
     .replace(/^```(?:mdx|markdown)?\s*\n/, '')
     .replace(/\n```\s*$/, '')
@@ -255,10 +281,9 @@ async function main() {
 
   const client = new Anthropic({ apiKey });
   const data = JSON.parse(fs.readFileSync(BOSSES_JSON, 'utf-8'));
-  const allBosses: Boss[] = data.bosses;
+  let bosses: Boss[] = data.bosses;
 
-  // Filter
-  let bosses = allBosses;
+  // Filters
   if (args.slug) bosses = bosses.filter((b) => b.slug === args.slug);
   if (args.region) bosses = bosses.filter((b) => b.region === args.region);
 
@@ -269,31 +294,44 @@ async function main() {
 
   const langs: ('en' | 'zh')[] = args.lang ? [args.lang] : ['en', 'zh'];
 
-  console.log(`\n⚔  Elden Codex — Boss Generation Pipeline\n`);
-  console.log(`   Bosses: ${bosses.length}`);
+  // Apply limit AFTER filtering — limit applies to # of bosses we'll touch
+  if (Number.isFinite(args.limit)) {
+    // Find first N bosses that have at least one pending language
+    const filtered: Boss[] = [];
+    for (const boss of bosses) {
+      if (filtered.length >= args.limit) break;
+      const hasPending = langs.some((lang) => {
+        if (REFERENCE_SLUGS.includes(boss.slug) && !args.force) return false;
+        const out = path.join(OUTPUT_DIR, lang, `${boss.slug}.mdx`);
+        return !fs.existsSync(out) || args.force;
+      });
+      if (hasPending) filtered.push(boss);
+    }
+    bosses = filtered;
+  }
+
+  console.log(`\n⚔  Elden Codex — Boss Generation Pipeline (v2)\n`);
+  console.log(`   Bosses to process: ${bosses.length}`);
   console.log(`   Languages: ${langs.join(', ')}`);
   console.log(`   Total tasks: ${bosses.length * langs.length}`);
   if (args.maxCost !== Infinity) console.log(`   Cost cap: $${args.maxCost}`);
-  if (args.dryRun) console.log(`   Mode: DRY RUN (no API calls)`);
+  if (args.limit !== Infinity) console.log(`   Limit: ${args.limit} bosses`);
+  if (args.dryRun) console.log(`   Mode: DRY RUN`);
   console.log('');
 
   const costTracker = { spent: 0 };
   const stats = { generated: 0, skipped: 0, errors: 0 };
 
-  // Load reference content once per language (cached for the run)
   const refs = {
     en: loadReferences('en'),
     zh: loadReferences('zh'),
   };
 
-  for (const lang of langs) {
-    if (!refs[lang] && !args.dryRun) {
-      console.warn(
-        `⚠  No reference files found in content/bosses/${lang}/ — output quality may be lower.`
-      );
-    }
+  // INTERLEAVED: for each boss, run all langs in sequence before moving on
+  outer: for (const boss of bosses) {
+    for (const lang of langs) {
+      if (interrupted) break outer;
 
-    for (const boss of bosses) {
       const tag = `[${lang}] ${boss.name_en}`;
       try {
         const result = await generateOne(client, boss, lang, refs[lang], args, costTracker);
@@ -318,6 +356,7 @@ async function main() {
   console.log(`Skipped:   ${stats.skipped}`);
   console.log(`Errors:    ${stats.errors}`);
   console.log(`Total cost: $${costTracker.spent.toFixed(4)}`);
+  if (interrupted) console.log(`Status:    INTERRUPTED — re-run to continue`);
   console.log('────────────────────────────────────────\n');
 }
 

@@ -1,6 +1,6 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
 import bossesData from '@/data/bosses.json';
-import { BossCard } from '@/components/boss-card';
+import { BossFilter } from '@/components/boss-filter';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -11,6 +11,14 @@ export const metadata: Metadata = {
 export default function BossesPage({ params: { lang } }: { params: { lang: Locale } }) {
   const dict = getDictionary(lang);
   const bosses = bossesData.bosses;
+  const dlcRegions = bossesData.regions.filter((r) => r.dlc).map((r) => r.slug);
+  const filterLabels = {
+    all: lang === 'en' ? 'All' : '全部',
+    main: dict.boss.main_story,
+    legend: dict.boss.legend,
+    field: dict.boss.field,
+    dlc: dict.boss.dlc,
+  };
 
   return (
     <div className="reading-area min-h-screen">
@@ -28,38 +36,16 @@ export default function BossesPage({ params: { lang } }: { params: { lang: Local
           </p>
         </div>
 
-        {/* Filter pills — placeholder for now, will be interactive in iteration */}
-        <div className="flex flex-wrap gap-2 mb-6 md:mb-8 justify-center">
-          <FilterPill label={lang === 'en' ? 'All' : '全部'} active />
-          <FilterPill label={dict.boss.main_story} />
-          <FilterPill label={dict.boss.legend} />
-          <FilterPill label={dict.boss.field} />
-          <FilterPill label={dict.boss.dlc} />
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3 md:gap-4 max-w-5xl mx-auto">
-          {bosses.map((boss) => (
-            <BossCard key={boss.slug} boss={boss} locale={lang} />
-          ))}
-        </div>
+        {/* Interactive filter + grid */}
+        <BossFilter
+          bosses={bosses}
+          locale={lang}
+          dlcRegions={dlcRegions}
+          labels={filterLabels}
+        />
 
         <div className="text-center mt-10 ornament"><span>◆</span></div>
       </div>
     </div>
-  );
-}
-
-function FilterPill({ label, active = false }: { label: string; active?: boolean }) {
-  return (
-    <span
-      className={`font-gothic text-[10px] px-3 py-1 rounded-full border tracking-widest uppercase cursor-pointer transition-colors ${
-        active
-          ? 'bg-gold/10 text-gold border-gold-dim'
-          : 'bg-bg-raised text-ink-subtle border-edge hover:border-edge-strong'
-      }`}
-    >
-      {label}
-    </span>
   );
 }

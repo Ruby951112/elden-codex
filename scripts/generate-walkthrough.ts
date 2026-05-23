@@ -14,6 +14,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import matter from 'gray-matter';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -49,6 +50,51 @@ function parseArgs(): Args {
     }
   }
   return args;
+}
+
+/**
+ * Escape a bare `<` used as a "less than" sign (e.g. `< 60%`, `<=5m`). Mirrors
+ * sanitizeMdx() in lib/mdx.ts so the file is build-safe at write time, not just
+ * patched on read. Only `<` before whitespace/digit/`=` is escaped, leaving real
+ * tags and autolinks intact.
+ */
+function escapeBareLt(body: string): string {
+  return body.replace(/<(?=[\s0-9=])/g, '&lt;');
+}
+
+/**
+ * Strip any code-fence wrapping the model added, escape bare `<` in the body
+ * (never inside the YAML frontmatter), and validate the frontmatter. Returns the
+ * cleaned text plus any warnings worth surfacing in the run log.
+ */
+function cleanAndValidate(raw: string, expectedSlug: string): { text: string; warnings: string[] } {
+  const warnings: string[] = [];
+  let text = raw
+    .replace(/^```(?:mdx|markdown)?\s*\n/, '')
+    .replace(/\n```\s*$/, '')
+    .trim();
+
+  const fm = text.match(/^---\n[\s\S]*?\n---\n?/);
+  if (fm) {
+    text = fm[0] + escapeBareLt(text.slice(fm[0].length));
+  } else {
+    warnings.push('no YAML frontmatter');
+    text = escapeBareLt(text);
+  }
+
+  try {
+    const { data } = matter(text);
+    for (const field of ['title', 'slug', 'description'] as const) {
+      if (!data[field] || String(data[field]).trim() === '') warnings.push(`missing "${field}"`);
+    }
+    if (data.slug && data.slug !== expectedSlug) {
+      warnings.push(`slug "${data.slug}" ≠ "${expectedSlug}"`);
+    }
+  } catch (err) {
+    warnings.push(`frontmatter parse failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  return { text, warnings };
 }
 
 async function main() {
@@ -139,17 +185,17 @@ Frontmatter fields:
           usage.output_tokens * COST_PER_OUTPUT_TOKEN;
         totalCost += cost;
 
-        const text = response.content
+        const rawText = response.content
           .filter((b): b is Anthropic.TextBlock => b.type === 'text')
           .map((b) => b.text)
-          .join('')
-          .replace(/^```(?:mdx|markdown)?\s*\n/, '')
-          .replace(/\n```\s*$/, '')
-          .trim();
+          .join('');
+
+        const { text, warnings } = cleanAndValidate(rawText, region.slug);
 
         fs.mkdirSync(path.dirname(outPath), { recursive: true });
         fs.writeFileSync(outPath, text + '\n', 'utf-8');
-        console.log(`✓ [${lang}] ${region.name_en} — $${cost.toFixed(4)}`);
+        const warn = warnings.length ? `  ⚠ ${warnings.join('; ')}` : '';
+        console.log(`✓ [${lang}] ${region.name_en} — $${cost.toFixed(4)}${warn}`);
         generated++;
       } catch (err) {
         console.error(`✗ [${lang}] ${region.name_en} —`, err instanceof Error ? err.message : err);

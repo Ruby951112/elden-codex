@@ -43,7 +43,7 @@ export function MobileBottomNav({ locale }: { locale: Locale }) {
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-bg-deepest border-t border-edge z-40 grid grid-cols-5">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-bg-deepest border-t border-edge z-40 grid grid-cols-5 pb-safe">
       {items.map((item) => {
         const active = pathname.startsWith(item.href);
         return (

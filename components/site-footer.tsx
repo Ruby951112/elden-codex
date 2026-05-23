@@ -47,6 +47,22 @@ export function SiteFooter({ locale }: { locale: Locale }) {
                 : '发现错误?想要合作?随时告诉我们。'}
             </p>
           </div>
+
+          {/* Legal */}
+          <div className="flex flex-col gap-2">
+            <h3 className="font-gothic text-xs uppercase tracking-widest text-gold mb-1">
+              {locale === 'en' ? 'Legal' : '法律'}
+            </h3>
+            <Link href={`/${locale}/about`} className="text-ink-body hover:text-gold text-sm transition-colors">
+              {locale === 'en' ? 'About' : '关于'}
+            </Link>
+            <Link href={`/${locale}/privacy`} className="text-ink-body hover:text-gold text-sm transition-colors">
+              {locale === 'en' ? 'Privacy Policy' : '隐私政策'}
+            </Link>
+            <Link href={`/${locale}/terms`} className="text-ink-body hover:text-gold text-sm transition-colors">
+              {locale === 'en' ? 'Terms of Service' : '服务条款'}
+            </Link>
+          </div>
         </div>
 
         {/* Ornament divider */}

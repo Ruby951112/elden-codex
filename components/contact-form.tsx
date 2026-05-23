@@ -18,6 +18,7 @@ export function ContactForm({ locale }: { locale: Locale }) {
       name: formData.get('name') as string,
       email: formData.get('email') as string,
       message: formData.get('message') as string,
+      website: (formData.get('website') as string) || '', // honeypot
       locale,
     };
 
@@ -62,6 +63,14 @@ export function ContactForm({ locale }: { locale: Locale }) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-bg-raised border border-edge rounded-md p-6 md:p-8 flex flex-col gap-4">
+      {/* Honeypot — invisible to humans; bots that fill it are silently dropped server-side */}
+      <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden" tabIndex={-1}>
+        <label>
+          Website
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" />
+        </label>
+      </div>
+
       <div className="flex flex-col gap-2">
         <label className="font-gothic text-[11px] uppercase tracking-widest text-ink-subtle">
           {dict.contact.name}

@@ -2,6 +2,28 @@ import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { siteConfig } from '@/lib/site-config';
 
+// Best-effort in-memory IP rate limit. NOTE: serverless instances are ephemeral
+// and not shared, so this only throttles bursts hitting the same warm instance.
+// For hard guarantees use a shared store (Upstash / Vercel KV) keyed by IP.
+const RATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const RATE_MAX = 5; // submissions per IP per window
+const rateHits = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  if (rateHits.size > 5000) {
+    // prune expired entries so the map can't grow unbounded
+    for (const [key, rec] of rateHits) if (now > rec.resetAt) rateHits.delete(key);
+  }
+  const rec = rateHits.get(ip);
+  if (!rec || now > rec.resetAt) {
+    rateHits.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > RATE_MAX;
+}
+
 /**
  * Contact form handler.
  *
@@ -19,17 +41,32 @@ import { siteConfig } from '@/lib/site-config';
  *   CONTACT_FROM_EMAIL        — verified sender (defaults to onboarding@resend.dev for dev)
  */
 export async function POST(request: Request) {
-  // Basic rate limit by IP — simple in-memory; for production, use Vercel KV / Upstash
-  // For MVP, this is fine — spam protection happens via Cloudflare in front
+  // Rate limit by client IP (Vercel sets x-forwarded-for).
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: 'Too many submissions. Please try again later.' },
+      { status: 429 }
+    );
+  }
 
   try {
     const body = await request.json();
-    const { name, email, message, locale } = body as {
+    const { name, email, message, website, locale } = body as {
       name?: string;
       email?: string;
       message?: string;
+      website?: string; // honeypot — should always be empty for real users
       locale?: string;
     };
+
+    // Honeypot: a bot filled the hidden field. Pretend success, send nothing.
+    if (website && website.trim() !== '') {
+      return NextResponse.json({ ok: true });
+    }
 
     // Validation
     if (!name || !email || !message) {
